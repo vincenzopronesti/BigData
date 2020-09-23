@@ -1,0 +1,20 @@
+Hands-on session n.1 : HDFS, Redis, MongoDB
+
+0. Install Docker
+
+1. HDFS 
+
+( On GitHub the source code that allows you to create or customize the effeerre/hadoop Docker image: https://github.com/effereds/hadoop ) 
+
+	- retrieve the Docker image with pre-installed Hadoop (docker pull effeerre/hadoop)
+
+2. Redis 
+
+	- retrieve the Docker image ( docker pull sickp/alpine-redis )
+
+3. MongoDB 
+
+	- retrieve the Docker image ( docker pull mongo )
+ 
+
+  

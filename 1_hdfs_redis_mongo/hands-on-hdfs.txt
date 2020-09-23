@@ -1,0 +1,132 @@
+Hands-on session: HDFS
+
+1. Let's retrieve the Docker image with pre-installed Hadoop
+  docker pull effeerre/hadoop
+
+  (On GitHub the source code that allows you to create or customize the effeerre/hadoop Docker image: https://github.com/effereds/hadoop )
+
+2. We can now create an isolated network with 3 datanodes and a namenode
+  docker network create --driver bridge hadoop_network
+
+  docker run -t -i -p 9864:9864 -d --network=hadoop_network --name=slave1 effeerre/hadoop
+  docker run -t -i -p 9863:9864 -d --network=hadoop_network --name=slave2 effeerre/hadoop
+  docker run -t -i -p 9862:9864 -d --network=hadoop_network --name=slave3 effeerre/hadoop
+  docker run -t -i -p 9870:9870 --network=hadoop_network --name=master effeerre/hadoop
+
+3. Before we start, let's check the configuration files. Being interested only in the HDFS,
+	we explore core-site.xml, which contains the location of the namenode (master), and the
+	hdfs-site.xml, which contains the default replication degree of files stored on the HDFS.
+	In "workers", we can find the list of datanodes available for the storing data. Observe that
+	Docker helps us, because it automatically adds the containers' name in /etc/hosts, so we
+	can connect to "slave1", for example, without knowing its IP address assigned by the
+	network.
+
+  cd $HADOOP_HOME/etc/hadoop
+  vi core-site.xml
+  vi hdfs-site.xml
+  vi workers
+
+4. The configuration of HDFS is ready, we can initialize our system. As for each file system, we
+	need to format our storage units. The format operation loses all stored data, hence it has
+	to be performed only the first time we activate the HDFS.
+
+  hdfs namenode -format
+
+5. Everything is ready. We can start the HDFS from the namenode (master). The initialization
+	script will automatically start the datanodes (configured in the "workers" file):
+
+  $HADOOP_HOME/sbin/start-dfs.sh
+
+
+6. It is running. Let's explore the (empty) HDFS:
+
+  http://localhost:9870/dfshealth.html
+  hdfs dfsadmin -report
+
+7. Let's play around: basic operations
+============================================
+Basic operations
+-----------------
+
+ echo "File content" >> file
+ hdfs dfs -put file /file
+ hdfs dfs -ls /
+ hdfs dfs -mv /file /democontent
+ hdfs dfs -cat /democontent
+ hdfs dfs -appendToFile file /democontent
+ hdfs dfs -cat /democontent
+ hdfs dfs -mkdir /folder01
+ hdfs dfs -cp /democontent /folder01/text
+ hdfs dfs -ls /folder01
+ hdfs dfs -rm /democontent
+ hdfs dfs -get /folder01/text textfromhdfs
+ cat textfromhdfs
+ hdfs dfs -rm -r /folder01
+
+============================================
+Snapshot
+-----------------
+
+hdfs dfs -mkdir /snap
+hdfs dfs -put file /file
+hdfs dfs -cp /debs /snap/debs
+hdfs dfsadmin -allowSnapshot /snap
+hdfs dfs -createSnapshot /snap snap001
+
+hdfs dfs -appendToFile /file /snap/file
+hdfs dfs -cat /snap/file
+
+
+# Listing the snapshots:
+hdfs dfs -ls /snap/.snapshot
+# Listing the files in snapshot snap001:
+hdfs dfs -ls /snap/.snapshot/snap001
+# Copying a file from snapshot snap001:
+hdfs dfs -cp -ptopax /snap/.snapshot/snap001/file /test
+
+hdfs dfs -cat /test
+hdfs dfs -cat /snap/file
+
+hdfs dfs -deleteSnapshot /snap snap001
+hdfs dfsadmin -disallowSnapshot /snap
+
+hdfs dfs -rm -r /snap
+
+============================================
+Replication
+-----------------
+
+hdfs dfs -mkdir /norepl
+hdfs dfs -put file /norepl/file
+hdfs dfs -ls /norepl
+hdfs dfs -setrep 1 /norepl
+hdfs dfs -ls /norepl
+hdfs dfs -put file /norepl/file2
+hdfs dfs -ls /norepl
+hdfs dfs -setrep 1 /norepl/file2
+#check block availability from website (and after a while)
+
+
+8. Replication is meant for fault-tolerance. Let's check the system behavior when a datanode is terminated forcefully.
+	We consider a file previously uploaded on the HDFS and we check the datanodes that store its blocks.
+	Afterwards, we kill the related datanode; assuming the chuck is on the node slave2:
+
+	# Check availability di un file
+	# Kill del datanote (e.g., 529b2e16cbea)
+
+  docker kill slave2
+
+  We can now monitor the datanode states from:
+	http://localhost:9870/dfshealth.html#tab-datanode
+
+   After a while data are replicated automatically on a safe node.
+
+9. We can turn off our HDFS:
+
+  $HADOOP_HOME/sbin/stop-dfs.sh
+
+10. We can stop and remove our Docker environment:
+
+  docker kill master slave1 slave2 slave3
+  docker rm master slave1 slave2 slave3
+  docker network rm hadoop_network
