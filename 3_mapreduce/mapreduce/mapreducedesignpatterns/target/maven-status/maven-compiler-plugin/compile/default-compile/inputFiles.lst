@@ -1,0 +1,11 @@
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/util/SumCountTuple.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/ordering/Shuffling.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/hierarchical/TopicItemsHierarchy.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/partitioning/PartitionDataByYear.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/util/Topic.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/filtering/DistinctWords.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/ordering/TotalOrdering.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/summarizations/AverageWordLengthByInitialLetter.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/designpattern/filtering/DistributedGrep.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/SophisticatedWordCount.java
+/home/fabiana/mapreduce/mapreducedesignpatterns/src/main/java/WordCount.java

@@ -1,0 +1,173 @@
+Hands-on session: MapReduce and MapReduce Design Patterns
+
+1. Let's retrieve the Docker image with pre-installed Hadoop
+
+	docker pull effeerre/hadoop
+
+2. We can now create an Hadoop cluster, connected to the hadoop_network. We will interact on the master node, exchanging file through the volume mounted in /data.
+   We use as working directory mapreducedesignpatterns/dist which contains the folder hddata
+
+	docker network create --driver bridge hadoop_network
+
+	docker run -t -i -p 9864:9864 -d --network=hadoop_network --name=slave1 effeerre/hadoop
+	docker run -t -i -p 9863:9864 -d --network=hadoop_network --name=slave2 effeerre/hadoop
+	docker run -t -i -p 9862:9864 -d --network=hadoop_network --name=slave3 effeerre/hadoop
+	docker run -t -i -p 9870:9870 -p 8088:8088 --network=hadoop_network --name=master -v $PWD/hddata:/data effeerre/hadoop
+
+   (alternatively, we can use the create.sh script)
+
+3. Before we start, we need to initialize our Hadoop environment, because the effeerre/hadoop image provides a raw environment. We perform the following operations:
+
+	hdfs namenode -format
+	$HADOOP_HOME/sbin/start-dfs.sh
+	$HADOOP_HOME/sbin/start-yarn.sh
+
+	(alternatively, we can use the script /data/script/initialize.sh)
+
+	We can check if everything is ok using the WebUI:
+	- HDFS: http://localhost:9870
+	- MapReduce Master: http://localhost:8088/
+
+	Note: in a production environment, the configuration of the hdfs servers should include a safe directory where data are stored (usually on a volume external to the container).
+
+4. Moving back to the mapreducedesignpatterns, we can compile our project and push the data to the hadoop master node; we use the script: pack-pull.sh
+
+5. On the master node, we can launch our first hadoop job:
+(reference scripts: wordcount.sh, wordcount_cleanup.sh) 
+	cd /data
+	hdfs dfs -put input.txt hdfs:///input
+	hadoop jar mapreduce-design-patterns-1.0.jar WordCount hdfs:///input hdfs:///output
+
+	We can check the results:
+	hdfs dfs -ls /
+	hdfs dfs -ls /output
+	hdfs dfs -cat /output/part-r-00000
+
+	sh ./wordcount2_cleanup.sh
+	
+6. A more sophisticated Word Count job:
+(reference scripts: wordcount2.sh, wordcount2_cleanup.sh, wordcount3.sh, wordcoun3_cleanup.sh) 
+
+	hadoop jar mapreduce-design-patterns-1.0.jar SophisticatedWordCount hdfs:///input hdfs:///output
+	hdfs dfs -ls /output
+	hdfs dfs -cat /output/part-r-00000
+	hdfs dfs -cat /output/part-r-00001
+	
+	sh ./wordcount2_cleanup2.sh
+
+	hdfs dfs -put blacklist.txt hdfs:///blacklist
+	hadoop jar mapreduce-design-patterns-1.0.jar SophisticatedWordCount hdfs:///input hdfs:///output2 -skip hdfs:///blacklist
+	hdfs dfs -ls /output2
+	hdfs dfs -cat /output2/part-r-00000
+	hdfs dfs -cat /output2/part-r-00001
+
+	sh ./wordcount3_cleanup.sh
+
+###################################################
+
+Design Pattern: Number Summarizations
+
+Example: Average Word Length by Initial Letter
+(reference scripts: avgworlen.sh, avgworlen_cleanup.sh) 
+
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.summarizations.AverageWordLengthByInitialLetter hdfs:///input hdfs:///outawl
+	hdfs dfs -ls /outawl
+	hdfs dfs -cat /outawl/part-r-00000
+	hdfs dfs -cat /outawl/part-r-00001
+
+	sh ./avgworlen_cleanup.sh
+
+###################################################
+
+Design Pattern: Filtering
+
+Example: Distributed Grep
+(reference scripts: distributedgrep.sh, distributedgrep_cleanup.sh)
+
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.filtering.DistributedGrep "good" hdfs:///input hdfs:///outdistgrep
+	hdfs dfs -ls /outdistgrep
+	hdfs dfs -cat /outdistgrep/part-m-00000
+
+	sh ./distributedgrep_cleanup.sh
+
+---
+
+Design Pattern: Distinct
+
+Example: Distinct Words
+(reference scripts: distinctwords.sh, distinctwords_cleanup.sh)
+
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.filtering.DistinctWords hdfs:///input hdfs:///outdistword
+	hdfs dfs -ls /outdistword
+	hdfs dfs -cat /outdistword/part-r-00000
+
+	sh ./distinctwords_cleanup.sh
+
+###################################################
+
+Design Pattern: Data Organization Pattern
+
+Example: Create a json of a topic, which contains the list of its items. Two inputs are provided, the list of topics, the list of items.
+(reference scripts: hierarchical.sh, hierarchical_cleanup.sh)
+
+	hdfs dfs -put hierarchical/categories.txt hdfs:///categories
+	hdfs dfs -put hierarchical/items.txt hdfs:///items
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.hierarchical.TopicItemsHierarchy hdfs:///categories hdfs:///items hdfs:///outhierarchical
+	hdfs dfs -ls /outhierarchical
+	hdfs dfs -cat /outhierarchical/part-r-00000
+
+	sh ./hierarchical_cleanup.sh
+
+---
+
+Design Pattern: Partitioning
+
+Example:
+(reference scripts: partitioning.sh, partitioning_cleanup.sh)
+
+	hdfs dfs -put partitioning/dates.txt hdfs:///dates
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.partitioning.PartitionDataByYear hdfs:///dates hdfs:///outpartitioning
+	hdfs dfs -ls /outpartitioning
+	hdfs dfs -cat /outpartitioning/part-r-00001
+	hdfs dfs -cat /outpartitioning/part-r-00003
+
+	sh ./partitioning_cleanup.sh
+
+#########################################
+
+Design Pattern: Total Order Sorting
+
+Example:
+(reference scripts: totalordersorting.sh, totalordersorting_cleanup.sh)
+
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.ordering.TotalOrdering hdfs:///dates hdfs:///outtotalordering
+	hdfs dfs -ls /outtotalordering
+	hdfs dfs -cat /outtotalordering/part-r-00000
+	hdfs dfs -cat /outtotalordering/part-r-00001
+	hdfs dfs -cat /outtotalordering/part-r-00002
+	hdfs dfs -cat /outtotalordering/part-r-00003
+
+	sh ./totalordersorting_cleanup.sh
+
+#########################################
+
+Design Pattern: Shuffling
+
+Example:
+(reference scripts: shuffling.sh, shuffling_cleanup.sh)
+
+	hdfs dfs -put sorted_dates.txt hdfs:///sorteddates
+	hadoop jar mapreduce-design-patterns-1.0.jar designpattern.ordering.Shuffling hdfs:///sorteddates hdfs:///outshuffling
+	hdfs dfs -ls /outshuffling
+	hdfs dfs -cat /outshuffling/part-r-00000
+
+	sh ./shuffling_cleanup.sh
+
+#######################################
+
+	$HADOOP_HOME/sbin/stop-yarn.sh
+	$HADOOP_HOME/sbin/stop-dfs.sh
+
+	Remove Docker containers (see destroy.sh)
+
+
