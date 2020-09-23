@@ -1,0 +1,200 @@
+We are going to launch a local Storm cluster by leveraging on Docker compose. 
+To simplify the deployment, we use Docker compose, instead of launching the single Docker containers by hand. 
+The infrastructure we want to use is composed by Nimbus, 3 worker nodes, 1 Storm UI. 
+Then, we also run auxiliary components: ZooKeeper, RabbitMQ, Redis. 
+To submit applications to Storm, we also launch another container (with a shared volume where we copy our topology JAR). 
+
+In the following, we summarize the container, their image and command used to run the components. 
+- storm-nimbus 	(image: storm)
+- zookeeper 	(image: zookeeper)
+- storm-ui 		(image: storm; command: storm ui)
+- worker1 		(image: storm; command: storm supervisor)
+- worker2 		(image: storm; command: storm supervisor)
+- worker3 		(image: storm; command: storm supervisor)
+- rabbitmq	 	(image: rabbitmq:3-management) 
+- redis 		(image: redis:3.2-alpine)
+- storm-cli		(image: effeerre/storm-cli) 
+
+The storm-cli container shares a "data" folder (it is mounted in "/data"). We will copy our code in this folder and, 
+within the container, we will use the Storm API to launch the application. 
+
+------------------
+Start environment:
+	sh ./startEnvironment.sh
+
+------------------
+
+
+-------------------
+A simple topology: EsclamationTopology
+(local mode, cluster mode, parallelism)
+-------------------
+
+We consider a simple application which comprises the following three elements: 
+- a datasource which emits a name every second
+- a component that appends a "!" to the name
+- a second component, with the same logic of the previous one. 
+
+Important points: 
+- prepare function
+- output fields
+- collector
+- guarantee message processing: ack (read more: http://storm.apache.org/releases/1.1.0/Guaranteeing-message-processing.html) 
+- grouping
+
+We run the application first on a local cluster, and then on our cluster. 
+
+To start our application, we use use the storm-cli container. It has attached an external volume, mounted in /data. Within it, there is the .jar file (with all the dependencies) of our application. 
+As first step, we need to connect to the storm-cli container: 
+
+host $> docker attach storm-cli
+
+Local mode (we use storm-cli to solve the Storm dependencies)
+---
+# From storm-cli
+storm-cli $> cd /data/exclamation
+storm-cli $> /apache-storm-1.1.0/bin/storm jar handson-storm-1.0-jar-with-dependencies.jar exclamation.ExclamationTopology
+(alternatively: storm-cli $> ./launchTopologyLocal.sh )
+
+Check for lines with the "Emitting:" keyword
+
+
+Cluster mode 
+---
+# From storm-cli
+storm-cli $> cd /data/exclamation
+storm-cli $> /apache-storm-1.1.0/bin/storm jar handson-storm-1.0-jar-with-dependencies.jar exclamation.ExclamationTopology exclamation
+(alternatively: storm-cli $> ./launchTopology.sh )
+
+The output is emitted (but lost), because we do not save it somewhere. 
+- Check the Storm WebUI.
+- Check the parallelism of each DSP operator. 
+	storm-cli $> ./launchTopologyReplicated.sh 
+
+
+-------------------
+WordCount
+-------------------
+
+We create a word count as a data stream processing application. Its main components are: 
+- a datasource, which emits sentences
+- a splitter, which extracts words from each sentence 
+- a counter, which is a stateful operator that count the occurrences of words. 
+
+To better visualize the results, we include an auxiliary operator that exports results on a message queue, implemented with rabbitMQ. 
+ 
+Important points: 
+- field grouping
+- operator state
+
+We just check the execution on the cluster. 
+To check the results, we instantiate a monitoring application, which simple read the results from Rabbitmq:
+
+host $> cd handson-storm/dist/data/wordcount
+host $> ./launchMonitor.sh 
+
+The, we submit the Storm topology: 
+# From storm-cli
+storm-cli $> cd /data/wordcount
+storm-cli $> ./launchTopology.sh
+
+The topology automatically generate sentences and then processes them. 
+
+
+-------------------
+Rolling Count
+-------------------
+
+The idea is to identify the top-5 elements (words) most popular in a sliding window. 
+
+We create a data stream processing application which comprises the following operators: 
+- a datasource, which emits sentences
+- a rolling count operator, which counts the words within a sliding window of 9 secs and slides every 3 secs
+- two operators that realize the top-k ranking in two steps (typical design pattern): intermediateRanker can be distributed and parallelized, whereas totalRanker is centralized and computes the global ranking
+
+To better visualize the results, we include an auxiliary operator that exports results on a message queue, implemented with rabbitMQ. 
+ 
+Important points: 
+- window based on processing (execution) time
+- design pattern ranking
+
+We just check the execution on the cluster. 
+To check the results, we instantiate a monitoring application, which simple read the results from Rabbitmq:
+
+host $> cd handson-storm/dist/data/rollingcount
+host $> ./launchMonitor.sh 
+
+The, we submit the Storm topology: 
+# From storm-cli
+storm-cli $> cd /data/rollingcount
+storm-cli $> ./launchTopology.sh
+
+The topology automatically generate sentences and then processes them. 
+
+
+
+-------------------
+WordCount 2
+-------------------
+
+Storm 1.0 has explicitly introduced the concept of window. We revise a simplified version of the previous application relying on the window primitives by Storm.
+The idea is to identify the top-5 elements (words) most popular in a sliding window. 
+
+We create a data stream processing application which comprises the following operators: 
+- a datasource, which emits sentences
+- a splitter
+- word count operator with a sliding window; the length of the sliding window is 9 secs and it slides every 3 secs;
+
+To better visualize the results, we include an auxiliary operator that exports results on a message queue, implemented with rabbitMQ. 
+ 
+Important points: 
+- window primitives in Storm 1.0
+
+We just check the execution on the cluster. 
+To check the results, we instantiate a monitoring application, which simple read the results from Rabbitmq:
+
+host $> cd handson-storm/dist/data/wordcountwindowbased
+host $> ./launchMonitor.sh 
+
+The, we submit the Storm topology: 
+# From storm-cli
+storm-cli $> cd /data/wordcountwindowbased
+storm-cli $> ./launchTopology.sh
+
+The topology automatically generate sentences and then processes them. 
+
+
+-------------------
+DEBS Grand Challenge 2015
+-------------------
+
+- Storm: http://localhost:8080/
+- RabbitMQ: http://localhost:15672
+	user/password: rabbitmq
+
+To start our application, we use use the storm-cli container. It has attached an external volume, mounted in /data. Within it, there is the .jar file (with all the dependencies) of our application. 
+As first step, we need to connect to the container: 
+
+host $> docker attach storm-cli
+
+The, we submit the Storm topology: 
+# From storm-cli
+
+storm-cli $> cd /data/debs2015gc
+storm-cli $> ./launchTopology.sh
+
+To check the result of our application, we instantiate a monitoring application, which simple read the result pushed to rabbitmq by the Storm topology:
+
+host $> cd handson-storm/dist/data/debs2015gc
+host $> ./launchMonitor.sh 
+
+The topology is ready to accept and process data. We will push data relying on Redis, using an external data source (from our machine): 
+
+host $> ./launchDatasource.sh
+
+------------------
+Sop environment:
+	sh ./stopEnvironment.sh
+
+------------------
+
