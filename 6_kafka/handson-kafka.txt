@@ -1,0 +1,244 @@
+During this hands-on session, we will explore Kafka Streams. 
+We will set up a cluster of Kafka brokers using Docker Compose (see kafka-docker-compose/containerized-kafka/launchEnvironment.sh). 
+
+Moreover, we will interact with this cluster using our machine. 
+To set-up your environment, you should download Kafka (kafka_2.11-2.2.0.tgz) on your machine (e.g., in ~/kafka). Moreover, to run the kafka scripts, we find convenient to set-up a new environment variable. To this end, we should edit the file ~/.profile and add the following line (this is only an example!!) that includes the path where we downloaded and extracted kafka_2.11-2.2.0.tgz: 
+
+export KAFKA_HOME=/home/fabiana/workspace/sabd1819/kafka/kafka_2.11-2.2.0
+
+after having reloaded the .profile file (e.g., by running 'source ~/.profile' or by rebooting your machine), we can use the kafka scripts as follows: 
+
+   $KAFKA_HOME/bin/kafka-topics.sh
+
+
+==== ==== ==== 
+
+
+#1 
+Difference between single partition and multi-partition topics. 
+
+We want to show the main differences between single- and multi-partition topics. 
+
+1. First of all, let's create the topic using the script in dist/1_single-multi-partitions/createTopics.sh: 
+
+  $KAFKA_HOME/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 3 --topic t-multi-part
+  $KAFKA_HOME/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic t-singl-part
+
+2. We can now ask Kafka to describe the existing topics (dist/1_single-multi-partitions/describeTopics.sh)
+  $KAFKA_HOME/bin/kafka-topics.sh --zookeeper localhost:2181 --describe --topic t-singl-part
+  $KAFKA_HOME/bin/kafka-topics.sh --zookeeper localhost:2181 --describe --topic t-multi-part
+
+3. Before deleting such topics, let's see what are the main differences when data are consumed, using a Java example. 
+
+4. File: ConsumerLauncher creates 3 consumers that listen on a the single-partition topic or on the multiple-partition topic. First, let's run the multi-partition version. We can start this class, directly from the IDE (IntelliJ). 
+
+(NOTE: make sure that the following line is uncommented)
+    private final static String TOPIC = "t-multi-part";
+
+Now the consumer is ready. 
+
+5. File: ProducerLauncher starts the producer that, produces data without caring of partitions. It can take advantage of partitions if it produces data with specific keys (data with the same key are directed to the same partition). 
+
+We can now start the produced, in the multi-partition version. We can start this class, directly from the IDE (IntelliJ). 
+
+(NOTE: make sure that the following line is uncommented)
+    private final static String TOPIC = "t-multi-part";
+
+
+6. By navigating to the ConsumerLauncher console, we can see that all the 3 consumers are reading data: 
+  [0] Consuming record: (key=null, val=Hello world at 1559337467680)
+  [1] Consuming record: (key=null, val=Hello world at 1559337468683)
+  [2] Consuming record: (key=null, val=Hello world at 1559337469686)
+
+7. We can terminate the producer (first) and the consumer (second). 
+
+8. Let's change the code so to use the single-partition topic, i.e., make sure that the following line is un-commented: 
+    private final static String TOPIC = "t-singl-part";
+
+9. This time, we can see that only a single consumer receives data: 
+  [0] Consuming record: (key=null, val=Hello world at 1559337562083) 
+  [0] Consuming record: (key=null, val=Hello world at 1559337563088)
+  [0] Consuming record: (key=null, val=Hello world at 1559337564094)
+
+As from theory, we showed that there is a relation between consumers and partitions. 
+
+10. To conclude, we can delete the topics using the script: dist/1_single-multi-partitions/deleteTopics.sh
+
+
+==== ==== ==== 
+
+
+#2 KAFKA STREAMS: A simple, stateless transformation on a stream 
+
+We want to demostrate how to perform simple, stateless transformations via map functions.
+
+A kafka stream application reads from a kafka topic, processes data, and emits results in a new topic. In our case, we will read from the "TextLinesTopic" topic and we will emit results in the "UppercasedTextLinesTopic" topic. 
+
+
+1. Create the input and output topics used by this example.
+ $KAFKA_HOME/bin/kafka-topics --create --topic TextLinesTopic --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+ $KAFKA_HOME/bin/kafka-topics --create --topic UppercasedTextLinesTopic --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+
+  (alternatively, we can use the script: dist/2_mapfunction/1_createTopics.sh)
+
+2. From our IDE, we can start the application, by running the Java class stream.MapFunctionLambdaExample. It is very important that topics have been created before starting the application, otherwise the application will soon terminate. 
+
+	Key points: 
+	- final KStream<byte[], String> textLines =
+		        builder.stream("TextLinesTopic",
+		        Consumed.with(Serdes.ByteArray(),
+		                Serdes.String()));
+
+	  A Kafka streams is created using the StreamBuilder, that requires
+	  to specify a Serialize/Deserialize class (Serdes). We use the ones
+	  provided by the Kafka library. 
+
+	- we transform each elements of the stream using a "mapValues" transformation,
+	  that accepts a lambda function
+
+	- we save data using the "to()" operation, specifying the sink topic. 
+	
+	- after the stream definition, we can create and start it using the primitives: 
+	    final KafkaStreams streams = new KafkaStreams(builder.build(), props);
+	    streams.cleanUp();
+            streams.start();
+
+	  Note that '.cleanUp()' performs a clean up of the local StateStore
+	  directory (StreamsConfig.STATE_DIR_CONFIG) by deleting all data with
+ 	  regard to the application ID.
+
+3. Now that our application is ready, we should create a consumer that reads the data emitted by our application, i.e., a consumer of the UppercasedTextLinesTopic topic. To create a consumer that prints results on console, we can use the following command (or use the script: dist/2_mapfunction/2_startConsumer.sh) 
+
+   $KAFKA_HOME/bin/kafka-console-consumer --topic UppercasedTextLinesTopic --from-beginning --bootstrap-server localhost:9092
+
+4. Now, we are ready to create a producer that will send data to the TextLinesTopic. We can run the command (or use the script: dist/2_mapfunction/3_startProducer.sh)
+
+   $KAFKA_HOME/bin/kafka-console-producer --broker-list localhost:9092 --topic TextLinesTopic
+
+5. By writing on the producer console, we can see that the consumer receives text in upper case. 
+
+6. To conclude, we can delete the topics using the script: dist/2_mapfunction/4_deleteTopics.sh
+
+
+==== ==== ==== 
+
+
+#3 KStreams and KTables
+
+This example aims to show the KTable concept (see theory for further details). 
+
+A KTable is an abstraction of a changelog stream, where each data record represents an update. More precisely, the value in a data record is interpreted as an "UPDATE" of the last value for the same record key, if any (if a corresponding key doesn't exist yet, the update will be considered an INSERT). Using the table analogy, a data record in a changelog stream is interpreted as an UPSERT aka INSERT/UPDATE because any existing row with the same key is overwritten. Also, null values are interpreted in a special way: a record with a null value represents a "DELETE" or tombstone for the record's key.
+
+We often talk about "stream-table duality" to describe the close relationship between streams and tables. A stream can be considered a changelog of a table: aggregating data records in a stream will return a table. A table can be considered a snapshot, at a point in time, of the latest value for each key in a stream (a stream's data records are key-value pairs). 
+
+read more: https://kafka.apache.org/0110/documentation/streams/developer-guide#streams_duality
+
+
+In this example, we will create an application that counts all odds number received on a data stream. In Kafka streams, aggregations (i.e., count(), reduce(), aggregate()) lead to the creation a KTable. A KTable, stores the most updated value for a specific key.
+
+ 
+
+1. We create the input and output topics used by this example (dist/3_sum/1_createTopics.sh):
+   
+	$KAFKA_HOME/bin/kafka-topics.sh --create --topic numbers-topic --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+	$KAFKA_HOME/bin/kafka-topics.sh  --create --topic sum-of-odd-numbers-topic --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+
+
+2. From our IDE, we can start the application, by running the Java class stream.SumLambdaExample. 
+
+	Key points:
+	- the result of the reduce operation is a KTable
+            final KTable<String, Integer> sumOfOddNumbers = input
+                .filter((k, v) -> v % 2 != 0)
+                .selectKey((k, v) -> "overallSum")
+                .groupByKey()
+                .reduce((v1, v2) -> v1 + v2);
+	- we use the selectKey() api, to set a new key for each input record
+	- we count elements using the reduce() operation
+
+
+3. Now we can create a consumer that reads the data emitted by our application. To create a consumer that prints results on console, we can use the following command (or use the script: dist/3_sum/2_startConsumer.sh) 
+
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --topic sum-of-odd-numbers-topic --from-beginning --bootstrap-server localhost:9092 --property print.key=true --property value.deserializer=org.apache.kafka.common.serialization.IntegerDeserializer
+
+4. Now, we are ready to create a producer. This time, we will create a Java application that acts as producer. From our IDE, we can start the producer application, by running the Java class stream.SumLambdaExampleProducer. 
+
+	NOTE: the producer should terminates after few seconds.
+
+
+5. When the producer terminates (after a while - 10s), we can see that the consumer receives the results of the sum application:
+
+	overallSum	2500
+
+6. If we run the producer multi times, we will received the updated value, e.g.: 
+	overallSum	5000
+	overallSum	7500
+
+    Conceptually, streams and tables in kafka streams are deeply interleaved. New data on the streams carry the KTable updates. If we compare this behavior with the one obtained by other frameworks, we can consider the KTable as a result of stateful transformation on a stream of data. 
+
+7. To conclude, we can delete the topics using the script: dist/3_sum/4_deleteTopics.sh
+	
+
+
+==== ==== ==== 
+
+
+#4 
+A stateful transformation on a stream: WordCount
+
+In this example, we want to implement the "hello-world" of data streaming applications: the word count. 
+
+1. We create the input and output topics used by this example (dist/4_wordcount/1_createTopics.sh):
+   $KAFKA_HOME/bin/kafka-topics.sh --create --topic streams-plaintext-input --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+   $KAFKA_HOME/bin/kafka-topics.sh  --create --topic streams-wordcount-output --zookeeper localhost:2181 --partitions 1 --replication-factor 1
+
+2. From our IDE, we can start the application, by running the Java class stream.WordCount. 
+
+	Key points:
+	- The application definition is very similar to the one by other frameworks: 
+		final KTable<String, Long> wordCounts = textLines
+                .flatMapValues(
+                        value ->
+                                Arrays.asList
+                                        (pattern.split(value.toLowerCase())))
+                .groupBy((key, word) -> word)
+                .count();
+
+	  We run a flatMap, a groupBy and count.
+ 	- We specify the serdes for produced data pairs (key, value). 
+
+
+
+3. Now we can create a consumer that reads the data emitted by our application. To create a consumer that prints results on console, we can use the following command (or use the script: dist/4_wordcount/2_startConsumer.sh) 
+
+	$KAFKA_HOME/bin/kafka-console-consumer.sh --topic streams-wordcount-output --from-beginning --bootstrap-server localhost:9092 --property print.key=true --property value.deserializer=org.apache.kafka.common.serialization.LongDeserializer
+
+
+4. Now, we are ready to create a producer that will send data to the TextLinesTopic. We can run the command (or use the script: dist/4_wordcount/3_startProducer.sh)
+
+	$KAFKA_HOME/bin/kafka-console-producer.sh --broker-list localhost:9092 --topic streams-plaintext-input
+
+5. By writing on the producer console, we can see that the consumer receives the results of the wordcount application:
+
+	hello	1
+	world	1
+	this	1
+	is	1
+	the	1
+	sabd	1
+	course	1
+	hello	2
+	world	2
+ 
+	Key point: 
+	Note that new results are emitted as soon as new data arrive. For each new data, 
+	the updated count is emitted. 
+
+
+6. To conclude, we can delete the topics using the script: dist/4_wordcount/4_deleteTopics.sh
+
+-------
+
+
+(see kafka-docker-compose/containerized-kafka/stopEnvironment.sh). 
+
