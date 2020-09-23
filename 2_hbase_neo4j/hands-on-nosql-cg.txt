@@ -1,0 +1,146 @@
+Hands-on session: Column-based and Graph-based Data Store (NoSQL)
+
+################################################################################
+# Part 1: HBase (Column-oriented Data Store)
+################################################################################
+
+1. Let's retrieve the Docker image with pre-installed HBase (ref: https://hub.docker.com/r/harisekhon/hbase/dockerfile)
+	docker pull harisekhon/hbase:1.4
+
+2. We can now create an instance of HBase; since we are interesting to use it from our local machine, we need to forward several HBase ports;
+
+	docker run -ti --name=hbase-docker -h hbase-docker -p 2181:2181 -p 8080:8080 -p 8085:8085 -p 9090:9090 -p 9095:9095 -p 16000:16000 -p 16010:16010 -p 16201:16201 -p 16301:16301 harisekhon/hbase:1.4
+
+3. We are interested in interacting with our containerized instance of HBase using a Java application.
+		To allow our local machine to resolve the addressed of the HBase components, we should update the
+		/etc/hosts file by adding the following line:
+
+		127.0.0.1	hbase-docker
+
+4. We are ready to use HBase. We explore the HBaseClient.java and NewYorkCityBusDemo.java (ref: https://codelabs.developers.google.com/codelabs/cloud-bigtable-intro-java/index.html#2) files.
+
+========================================
+
+################################################################################
+# Part 2: Neo4j (Graph-based Data Store)
+################################################################################
+
+1. Let's retrieve the (official) Docker image with pre-installed Neo4j
+	docker pull neo4j:3.0
+
+2. We can now create an instance of Neo4j; we can also attach an external volume to the container
+(mapping the host folder $HOME/neo4j/data to the container folder /data). We also forward the webUI ports
+
+	docker run \
+	    --publish=7474:7474 --publish=7687:7687 \
+	    --volume=$HOME/neo4j/data:/data \
+	    neo4j:3.0
+
+3. We are ready to use Neo4j. Let's open a browser to http://localhost:7474/
+4. We can learn more about Neo4j from the online tutorial.
+========================================
+EXAMPLE
+
+Simple interactions on Neo4j.
+
+When the statement spans on multiple lines, it is delimited by "// --".
+
+******* Create nodes and relationships *******
+// --
+// Create nodes with labels and properties
+CREATE (bs:Songwriter {name:'Bruce Springsteen', birthyear:1945, nick:'the boss'})
+CREATE (theriver:Album {title:'The River', year:1980})
+CREATE (biu:Album {title:'Born in the U.S.A.', year:1984})
+CREATE (bd:Songwriter {name:'Bob Dylan'})
+CREATE (blond:Album {title:'Blonde on Blonde', year:1966})
+
+// Create relationships between nodes (defined in the same statement)
+CREATE (bs)-[:PLAYS]->(theriver)
+CREATE (bs)-[:PLAYS]->(biu)
+CREATE (bd)-[:PLAYS]->(blond)
+CREATE (bs)-[:RELATED]->(bd)
+// --
+
+******* Query (each line is a separate statement) *******
+// Just a simple query to obtain all the nodes in the data store
+MATCH (a) RETURN a;
+// Retrieve a node with label ":Songwriter" and property "name" like "Bob Dylan"
+MATCH (a:Songwriter {name:'Bob Dylan'}) RETURN a;
+
+// Retrieve nodes with property 'name' that starts with 'B' (the second clause uses a regular expression)
+MATCH (a) WHERE a.name STARTS WITH 'B' RETURN a;
+MATCH (a) WHERE a.name =~'Br.*' RETURN a;
+
+// Retrieve nodes with property 'name' having value greater than 'Bob Dylan' (alphabetical order),
+// and show the properties 'name' and 'age' (note that 'age' is not defined, so a <null> value is shown)
+MATCH (a) WHERE a.name > 'Bob Dylan' RETURN a.name, a.age
+
+
+******* Update a node *******
+// Retrieve a node to update its properties (a new birthyear property is added)
+MATCH (b {name: "Bruce Springsteen"}) SET b.birthyear=1949 RETURN b;
+
+// Retrieve two nodes and create a relationship :RELATED between them
+MATCH (a {name:"Bob Dylan"}), (b {name: "Bruce Springsteen"}) create (a)-[:RELATED]->(b) RETURN a,b
+MATCH (b {name: "Bruce Springsteen"}), (a {title:"Blonde on Blonde"}) CREATE (b)-[:LIKES]->(a) RETURN a,b
+
+
+// Retrieve the *** nodes *** if they are involved in the relationship r*
+******* Query: exploit relationships among entities *******
+
+//	(of any length, since we use the cardinality of the relationship as "*")
+MATCH (a {title:"Blonde on Blonde"})-[r*]-(b {title:"The River"}) RETURN a,b
+
+// Retrieve the relationship (of any length, since we use the cardinality of the relationship as "*") between two nodes
+MATCH  (theriver {title:"The River"}), p =((:Songwriter)-[r*]-(theriver)) RETURN p;
+
+// Retrieve the shortestPath between two nodes
+MATCH  (blonde {title:"Blonde on Blonde"}), (theriver {title:"The River"}), p = shortestPath((blonde)-[*..10]-(theriver)) RETURN p;
+
+
+******* Query: usage of (some) built-in functions  *******
+
+// Retrieve the used labels within the data store
+MATCH (n) RETURN labels(n);
+// Retrieve the **distinct** used labels within the data store
+MATCH (n) RETURN DISTINCT labels(n);
+
+MATCH (n) WHERE NOT (n:Songwriter) RETURN n;
+
+
+******* Remove a node property *******
+MATCH (b {name: "Bruce Springsteen"}) REMOVE b.birthyear RETURN b;
+
+******* Delete a node *******
+// Delete node (that does not participate to any relationships). To this end, we create an orphan node with label :ToDel
+CREATE (c:ToDel {name: "node to delete"}) RETURN c;
+MATCH (a:ToDel) DELETE a;
+
+// A node cannot be deleted if it has relationships. To remove also relationships, we need to detach the node:
+MATCH (b {name: "Bruce Springsteen"}) DETACH DELETE b;
+
+MATCH (a) RETURN a;
+
+
+// DROP the db
+MATCH (n)
+DETACH DELETE n
+
+MATCH (a) RETURN a;
+
+Further details:
+- http://neo4j.com/docs/developer-manual/current/cypher/functions/
+- http://neo4j.com/docs/developer-manual/current/cypher/clauses/
+
+
+=========================================================================
+NOTES:
+
+- 	docker ps -a -q
+-	docker rm [container_id]
+
+
+********************************************************************
+
+
+

@@ -1,0 +1,2 @@
+docker pull harisekhon/hbase:1.4
+docker pull neo4j:3.0
